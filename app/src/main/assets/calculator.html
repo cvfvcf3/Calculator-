@@ -1,1 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Calculator</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
+  body {
+    background: #000;
+    display: flex;
+    justify-content: center;
+    align-items: flex-end;
+    min-height: 100vh;
+    font-family: -apple-system, 'Helvetica Neue', sans-serif;
+  }
+
+  .calc {
+    width: 100%;
+    max-width: 420px;
+    padding: 0 12px 24px;
+  }
+
+  /* Display */
+  .display {
+    text-align: right;
+    padding: 10px 8px 18px;
+    min-height: 120px;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+  }
+
+  .expression {
+    color: #888;
+    font-size: 22px;
+    min-height: 28px;
+    margin-bottom: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .result {
+    color: #fff;
+    font-size: 72px;
+    font-weight: 200;
+    line-height: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .result.small { font-size: 46px; }
+  .result.xsmall { font-size: 34px; }
+
+  /* Grid */
+  .buttons {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+  }
+
+  /* Base button */
+  button {
+    border: none;
+    border-radius: 50%;
+    font-size: 28px;
+    font-weight: 400;
+    height: 0;
+    padding-bottom: 100%;
+    position: relative;
+    cursor: pointer;
+    transition: filter 0.1s;
+    outline: none;
+  }
+
+  button span {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  button:active { filter: brightness(1.4); }
+
+  /* Grey (numbers) */
+  .btn-num { background: #333; color: #fff; }
+
+  /* Dark grey (functions) */
+  .btn-fn { background: #a5a5a5; color: #000; }
+
+  /* Orange (operators) */
+  .btn-op { background: #ff9f0a; color: #fff; }
+
+  /* Zero button (wide) */
+  .btn-zero {
+    border-radius: 40px;
+    grid-column: span 2;
+    padding-bottom: 0;
+    height: auto;
+    aspect-ratio: unset;
+    min-height: 75px;
+  }
+
+  .btn-zero span {
+    justify-content: flex-start;
+    padding-left: 28px;
+  }
+
+  /* Active operator highlight */
+  .btn-op.active { background: #fff; color: #ff9f0a; }
+</style>
+</head>
+<body>
+<div class="calc">
+
+  <div class="display">
+    <div class="expression" id="expression"></div>
+    <div class="result" id="result">0</div>
+  </div>
+
+  <div class="buttons">
+    <!-- Row 1 -->
+    <button class="btn-fn" onclick="pressAC()"><span id="acLabel">AC</span></button>
+    <button class="btn-fn" onclick="pressToggle()"><span>+/-</span></button>
+    <button class="btn-fn" onclick="pressPercent()"><span>%</span></button>
+    <button class="btn-op" id="btnDiv" onclick="pressOp('÷')"><span>÷</span></button>
+
+    <!-- Row 2 -->
+    <button class="btn-num" onclick="pressNum('7')"><span>7</span></button>
+    <button class="btn-num" onclick="pressNum('8')"><span>8</span></button>
+    <button class="btn-num" onclick="pressNum('9')"><span>9</span></button>
+    <button class="btn-op" id="btnMul" onclick="pressOp('×')"><span>×</span></button>
+
+    <!-- Row 3 -->
+    <button class="btn-num" onclick="pressNum('4')"><span>4</span></button>
+    <button class="btn-num" onclick="pressNum('5')"><span>5</span></button>
+    <button class="btn-num" onclick="pressNum('6')"><span>6</span></button>
+    <button class="btn-op" id="btnSub" onclick="pressOp('−')"><span>−</span></button>
+
+    <!-- Row 4 -->
+    <button class="btn-num" onclick="pressNum('1')"><span>1</span></button>
+    <button class="btn-num" onclick="pressNum('2')"><span>2</span></button>
+    <button class="btn-num" onclick="pressNum('3')"><span>3</span></button>
+    <button class="btn-op" id="btnAdd" onclick="pressOp('+')"><span>+</span></button>
+
+    <!-- Row 5 -->
+    <button class="btn-num btn-zero" onclick="pressNum('0')"><span>0</span></button>
+    <button class="btn-num" onclick="pressDot()"><span>.</span></button>
+    <button class="btn-op" onclick="pressEquals()"><span>=</span></button>
+  </div>
+
+</div>
+
+<script>
+  let current = '0';
+  let firstOp = null;
+  let pendingOp = null;
+  let justEvaled = false;
+  let hasDecimal = false;
+
+  const resultEl = document.getElementById('result');
+  const exprEl = document.getElementById('expression');
+  const acLabel = document.getElementById('acLabel');
+  const opBtns = { '÷': 'btnDiv', '×': 'btnMul', '−': 'btnSub', '+': 'btnAdd' };
+
+  function updateDisplay() {
+    resultEl.textContent = current;
+    const len = current.length;
+    resultEl.className = 'result' + (len > 9 ? ' xsmall' : len > 6 ? ' small' : '');
+    acLabel.textContent = (current !== '0' || firstOp !== null) ? 'C' : 'AC';
+    // highlight active op
+    Object.values(opBtns).forEach(id => document.getElementById(id).classList.remove('active'));
+    if (pendingOp && !justEvaled) {
+      const id = opBtns[pendingOp];
+      if (id) document.getElementById(id).classList.add('active');
+    }
+  }
+
+  function pressNum(d) {
+    if (justEvaled) { current = d; justEvaled = false; }
+    else if (current === '0') current = d;
+    else current += d;
+    hasDecimal = current.includes('.');
+    updateDisplay();
+  }
+
+  function pressDot() {
+    if (justEvaled) { current = '0.'; justEvaled = false; }
+    else if (!current.includes('.')) current += '.';
+    hasDecimal = true;
+    updateDisplay();
+  }
+
+  function pressOp(op) {
+    justEvaled = false;
+    if (firstOp !== null && pendingOp) {
+      firstOp = compute(firstOp, parseFloat(current), pendingOp);
+      current = formatNum(firstOp);
+    } else {
+      firstOp = parseFloat(current);
+    }
+    pendingOp = op;
+    exprEl.textContent = formatNum(firstOp) + ' ' + op;
+    justEvaled = true;
+    updateDisplay();
+  }
+
+  function pressEquals() {
+    if (firstOp === null || pendingOp === null) return;
+    const second = parseFloat(current);
+    const res = compute(firstOp, second, pendingOp);
+    exprEl.textContent = formatNum(firstOp) + ' ' + pendingOp + ' ' + formatNum(second) + ' =';
+    current = formatNum(res);
+    firstOp = null;
+    pendingOp = null;
+    justEvaled = true;
+    updateDisplay();
+  }
+
+  function pressAC() {
+    current = '0';
+    firstOp = null;
+    pendingOp = null;
+    justEvaled = false;
+    hasDecimal = false;
+    exprEl.textContent = '';
+    updateDisplay();
+  }
+
+  function pressToggle() {
+    const v = parseFloat(current);
+    if (v !== 0) current = formatNum(-v);
+    updateDisplay();
+  }
+
+  function pressPercent() {
+    current = formatNum(parseFloat(current) / 100);
+    updateDisplay();
+  }
+
+  function compute(a, b, op) {
+    switch (op) {
+      case '+': return a + b;
+      case '−': return a - b;
+      case '×': return a * b;
+      case '÷': return b !== 0 ? a / b : NaN;
+    }
+  }
+
+  function formatNum(n) {
+    if (isNaN(n)) return 'Error';
+    if (!isFinite(n)) return 'Error';
+    // Remove floating point noise
+    const s = parseFloat(n.toPrecision(10)).toString();
+    return s;
+  }
+
+  updateDisplay();
+</script>
+</body>
+</html>
